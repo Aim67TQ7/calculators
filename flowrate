@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Gravity Flow Rate Calculator</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background: #f7f9fc;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: auto;
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    h2 {
+      text-align: center;
+      color: #333;
+    }
+
+    label {
+      display: block;
+      margin: 15px 0 5px;
+      font-weight: 600;
+      color: #444;
+    }
+
+    select, input[type="number"] {
+      width: 100%;
+      padding: 8px 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+
+    .radio-group {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .radio-group label {
+      font-weight: 500;
+    }
+
+    button {
+      background: #1f77b4;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-top: 15px;
+    }
+
+    button:hover {
+      background: #155d8a;
+    }
+
+    #result {
+      margin-top: 20px;
+      font-size: 16px;
+      color: #222;
+      padding: 15px;
+      background: #eaf4ff;
+      border-left: 5px solid #1f77b4;
+      border-radius: 6px;
+    }
+
+    #charts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin-top: 30px;
+    }
+
+    .chart-box {
+      flex: 1;
+      min-width: 350px;
+    }
+
+    @media (max-width: 768px) {
+      .chart-box {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Gravity Flow Rate Calculator</h2>
+
+    <!-- Unit Toggle -->
+    <div class="radio-group">
+      <label><input type="radio" name="units" value="metric" checked onchange="onUnitChange()"> Metric (kg/m³, mm)</label>
+      <label><input type="radio" name="units" value="imperial" onchange="onUnitChange()"> Imperial (lb/ft³, in)</label>
+    </div>
+
+    <!-- Inputs -->
+    <div id="inputFields"></div>
+
+    <!-- Output -->
+    <div id="result" style="display:none;"></div>
+
+    <!-- Dual Charts -->
+    <div id="charts">
+      <div class="chart-box"><div id="chartMetric"></div></div>
+      <div class="chart-box"><div id="chartImperial"></div></div>
+    </div>
+  </div>
+
+  <script>
+    const apertureFlowMap = {
+      30: 35.32, 50: 98.88, 70: 194.23, 90: 254.27,
+      120: 395.53, 150: 568.57, 200: 889.94,
+      250: 1528.11, 300: 2468.52, 350: 3556.22, 400: 6921.74
+    };
+
+    const mmToIn = mm => mm / 25.4;
+    const inToMm = inches => inches * 25.4;
+    let currentUnits = "metric";
+
+    function convertToImperial(value) {
+      return value / 16.0185;
+    }
+
+    function convertToMetric(value) {
+      return value * 16.0185;
+    }
+
+    function calculateGravityFlowRate(aperture_mm, bulkDensity, useImperial) {
+      if (!useImperial) bulkDensity = convertToImperial(bulkDensity);
+      const ft3_hr = apertureFlowMap[aperture_mm];
+      const lb_hr = ft3_hr * bulkDensity;
+      return useImperial
+        ? { volume: ft3_hr, mass: lb_hr }
+        : { volume: ft3_hr * 0.0283168, mass: lb_hr * 0.453592 };
+    }
+
+    function calculateFlow() {
+      const useImperial = currentUnits === "imperial";
+      const aperture = parseInt(document.getElementById('aperture').value);
+      const bulkDensity = parseFloat(document.getElementById('bulkDensity').value);
+      if (isNaN(bulkDensity) || bulkDensity <= 0) {
+        alert("Please enter a valid bulk density.");
+        return;
+      }
+
+      const result = calculateGravityFlowRate(aperture, bulkDensity, useImperial);
+      const resultDiv = document.getElementById('result');
+      resultDiv.style.display = 'block';
+      resultDiv.innerHTML = `
+        <strong>Volume Flow Rate:</strong> ${result.volume.toFixed(2)} ${useImperial ? "ft³/hr" : "m³/hr"}<br>
+        <strong>Mass Flow Rate:</strong> ${result.mass.toFixed(2)} ${useImperial ? "lb/hr" : "kg/hr"}
+      `;
+
+      updateCharts(bulkDensity);
+    }
+
+    function updateCharts(bulkDensityInput) {
+      const apertureKeys = Object.keys(apertureFlowMap).map(Number);
+      const xMetric = apertureKeys.map(mm => mm);
+      const yMetric = apertureKeys.map(mm =>
+        calculateGravityFlowRate(mm, bulkDensityInput, false).volume
+      );
+      const xImperial = apertureKeys.map(mm => mmToIn(mm).toFixed(2));
+      const yImperial = apertureKeys.map(mm =>
+        calculateGravityFlowRate(mm, bulkDensityInput, true).volume
+      );
+
+      Plotly.newPlot('chartMetric', [{
+        x: xMetric,
+        y: yMetric,
+        type: 'bar',
+        name: 'm³/hr',
+        marker: { color: '#1f77b4' }
+      }], {
+        title: 'Flow Rate by Aperture Size (Metric)',
+        xaxis: { title: 'Aperture Size (mm)' },
+        yaxis: { title: 'Volume Flow Rate (m³/hr)' }
+      });
+
+      Plotly.newPlot('chartImperial', [{
+        x: xImperial,
+        y: yImperial,
+        type: 'bar',
+        name: 'ft³/hr',
+        marker: { color: '#ff7f0e' }
+      }], {
+        title: 'Flow Rate by Aperture Size (Imperial)',
+        xaxis: { title: 'Aperture Size (in)' },
+        yaxis: { title: 'Volume Flow Rate (ft³/hr)' }
+      });
+    }
+
+    function renderInputFields() {
+      const useImperial = currentUnits === "imperial";
+      const apertureOptions = Object.keys(apertureFlowMap).map(mm => {
+        const display = useImperial ? `${mmToIn(mm).toFixed(2)} in` : `${mm} mm`;
+        return `<option value="${mm}">${display}</option>`;
+      }).join("");
+
+      const html = `
+        <label>Aperture Size:
+          <select id="aperture">${apertureOptions}</select>
+        </label>
+        <label>Bulk Density (${useImperial ? "lb/ft³" : "kg/m³"}):
+          <input type="number" id="bulkDensity" value="${useImperial ? '50' : '800'}" />
+        </label>
+        <button onclick="calculateFlow()">Calculate</button>
+      `;
+
+      document.getElementById('inputFields').innerHTML = html;
+    }
+
+    function onUnitChange() {
+      currentUnits = document.querySelector('input[name="units"]:checked').value;
+      renderInputFields();
+    }
+
+    // Initialize
+    renderInputFields();
+    updateCharts(currentUnits === "imperial" ? 50 : 800);
+  </script>
+</body>
+</html>
